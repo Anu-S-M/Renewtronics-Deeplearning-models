@@ -1,0 +1,167 @@
+# Cell 1: Data Loading and Preprocessing
+import numpy as np
+import tensorflow as tf
+import pandas as pd
+import matplotlib.pyplot as plt
+import os
+
+dataset_path = os.listdir('dataset')
+print(dataset_path)  # what kinds of classes are in this dataset
+print("Types of classes labels found: ", len(dataset_path))
+class_labels = []
+
+for item in dataset_path:
+    # Get all the file names
+    all_classes = os.listdir('dataset' + '/' + item)
+    
+    # Add them to the list
+    for room in all_classes:
+        class_labels.append((item, 'dataset' + '/' + item + '/' + room))
+
+# Print the first 5 elements of the class_labels list
+print(class_labels[:5])
+# Cell 2: Data Labeling and DataFrame Creation
+# Build a dataframe       
+df = pd.DataFrame(data=class_labels, columns=['Labels', 'image'])
+print(df.head())
+print(df.tail())
+# Let's check how many samples for each category are present
+print("Total number of images in the dataset: ", len(df))
+
+# Count the number of samples for each category (label)
+label_count = df['Labels'].value_counts()
+print(label_count)
+# Cell 3: Image Loading and Resizing
+import cv2
+path = 'dataset/'
+dataset_path = os.listdir('dataset')
+im_size = 224
+images = []
+labels = []
+
+for i in dataset_path:
+    data_path = path + str(i)
+    filenames = [j for j in os.listdir(data_path)]
+    
+    for f in filenames:
+        img = cv2.imread(data_path + '/' + f)
+        img = cv2.resize(img, (im_size, im_size))
+        images.append(img)
+        labels.append(i)
+# Cell 4: One-Hot Encoding
+from sklearn.preprocessing import LabelEncoder, OneHotEncoder
+
+# Extract labels from the 'Labels' column
+y = df['Labels'].values
+print("Original labels:\n", y)
+
+# Use LabelEncoder to convert categorical labels to numerical format
+y_labelencoder = LabelEncoder()
+y_encoded = y_labelencoder.fit_transform(y)
+print("Encoded labels:\n", y_encoded)
+
+# Reshape y to have a single column
+y = y_encoded.reshape(-1, 1)
+
+# Use ColumnTransformer with OneHotEncoder to perform one-hot encoding
+from sklearn.compose import ColumnTransformer
+
+ct = ColumnTransformer([('my_ohe', OneHotEncoder(), [0])], remainder='passthrough')
+Y = ct.fit_transform(y)
+
+# Print the one-hot encoded labels
+print("One-hot encoded labels (first 5):\n", Y[:5])
+print("One-hot encoded labels (from index 35 onwards):\n", Y[35:])
+# Cell 5: Data Splitting
+import numpy as np
+from sklearn.utils import shuffle
+from sklearn.model_selection import train_test_split
+
+# Shuffle images and labels in the same random order
+images, Y = shuffle(images, Y, random_state=1)
+
+# Split the data into training and testing sets
+train_x, test_x, train_y, test_y = train_test_split(images, Y, test_size=0.05, random_state=415)
+train_x = np.array(train_x)
+test_x = np.array(test_x)
+# Inspect the shape of the training and testing sets
+print("Training data shape:")
+print("train_x:", train_x.shape)
+print("train_y:", train_y.shape)
+
+print("\nTesting data shape:")
+print("test_x:", test_x.shape)
+print("test_y:", test_y.shape)
+# Cell 7: Model Building
+from tensorflow.keras import layers
+from tensorflow.keras.applications import EfficientNetB0
+
+NUM_CLASSES = 3
+IMG_SIZE = 224
+size = (IMG_SIZE, IMG_SIZE)
+
+inputs = layers.Input(shape=(IMG_SIZE, IMG_SIZE, 3))
+
+# Using model without transfer learning
+base_model = EfficientNetB0(include_top=False, weights='imagenet', input_tensor=inputs)
+x = layers.GlobalAveragePooling2D()(base_model.output)
+x = layers.Dense(NUM_CLASSES, activation='softmax')(x)
+
+model = tf.keras.models.Model(inputs=inputs, outputs=x)
+# Cell 7: Model Training
+# (Note: This cell should be run after building the model in the previous cell)
+
+# Compile the model
+model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+
+# Fine-tune the model
+fine_tune_epochs = 10
+history_fine_tune = model.fit(train_x, train_y, epochs=fine_tune_epochs, verbose=2)
+# Cell 8: Learning Rate Scheduling
+# (Note: This cell should be run after training the model)
+
+from tensorflow.keras.callbacks import LearningRateScheduler
+
+def lr_schedule(epoch):
+    lr = 1e-3
+    if epoch > 10:
+        lr *= 0.1
+    return lr
+
+lr_scheduler = LearningRateScheduler(lr_schedule)
+
+# Include lr_scheduler in the callbacks list during training
+history = model.fit(train_x, train_y, epochs=30, callbacks=[lr_scheduler], verbose=2)
+# Cell 9: Model Evaluation
+# (Note: This cell should be run after training the model)
+
+# Evaluate your model
+preds = model.evaluate(test_x, test_y)
+print("Loss =", preds[0])
+print("Test Accuracy =", preds[1])
+# Load and preprocess the test image
+img_path = '/content/testimage.jpg'  # Replace with the actual path to your test image
+img = cv2.imread(img_path)
+img = cv2.resize(img, (IMG_SIZE, IMG_SIZE))
+x_test = np.expand_dims(img, axis=0)
+x_test = preprocess_input(x_test)
+
+# Predict on the test image
+preds = model.predict(x_test)
+
+# Display the predicted probabilities for each class
+print("Probabilities for each class:", preds)
+
+# Get the predicted class index
+predicted_class_index = np.argmax(preds)
+
+# Map the class index to the corresponding class label
+class_labels = {0: 'earphones', 1: 'headphones', 2: 'phones'}  # Replace with your actual class labels
+
+# Display the predicted class label
+predicted_class_label = class_labels[predicted_class_index]
+print("Predicted class:", predicted_class_label)
+
+# Display the test image
+my_image = imread(img_path)
+imshow(my_image)
